@@ -57,6 +57,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
         aws-region: ${{ vars.AWS_REGION }}
 
     - name: Setup Terraform
@@ -148,4 +149,3 @@ jobs:
       if: github.event_name == 'workflow_dispatch' && matrix.environment == github.event.inputs.environment
       run: terraform apply -auto-approve -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"
 
-      
