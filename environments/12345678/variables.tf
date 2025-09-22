@@ -101,18 +101,18 @@ variable "app" {
 
 variable "user_pool_id" {
   description = "Id del user pool de cognito"
-  type = string
+  type        = string
 }
 
 variable "user_pool_arn" {
   description = ""
-  type = string
+  type        = string
 }
 
 variable "user_pool_domain" {
   description = ""
-  type = string
- }
+  type        = string
+}
 
 
 variable "waf_id" {
