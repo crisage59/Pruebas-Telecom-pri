@@ -148,3 +148,4 @@ jobs:
       if: github.event_name == 'workflow_dispatch' && matrix.environment == github.event.inputs.environment
       run: terraform apply -auto-approve -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"
 
+
