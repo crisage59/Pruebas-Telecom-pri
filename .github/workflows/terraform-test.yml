@@ -10,20 +10,40 @@ on:
 permissions:
   contents: read
 
+
 jobs:
   detect-environments:
-    name: 'Detect Environments'
+    name: 'Detect Changed Environments'
     runs-on: ubuntu-latest
     outputs:
       environments: ${{ steps.detect.outputs.environments }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    - name: Detect environments
+      with:
+        fetch-depth: 2
+    - name: Detect changed environments
       id: detect
       run: |
-        envs=$(find environments -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | jq -R -s -c 'split("\n")[:-1]')
-        echo "environments=$envs" >> $GITHUB_OUTPUT
+        changed_files=$(git diff --name-only HEAD~1 HEAD)
+        changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
+        echo "environments=$changed_envs" >> $GITHUB_OUTPUT
+        echo "Changed environments: $changed_envs"
+
+# jobs:
+#   detect-environments:
+#     name: 'Detect Environments'
+#     runs-on: ubuntu-latest
+#     outputs:
+#       environments: ${{ steps.detect.outputs.environments }}
+#     steps:
+#     - name: Checkout
+#       uses: actions/checkout@v4
+#     - name: Detect environments
+#       id: detect
+#       run: |
+#         envs=$(find environments -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | jq -R -s -c 'split("\n")[:-1]')
+#         echo "environments=$envs" >> $GITHUB_OUTPUT
 
   terraform:
     name: 'Terraform (${{ matrix.environment }})'
