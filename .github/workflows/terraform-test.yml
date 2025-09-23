@@ -3,17 +3,9 @@ name: 'Terraform S3 Pipeline'
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy (account ID)'
-        required: true
-        type: choice
-        options:
-          - '766028941436'
-          - '987654321098'
+    paths:
+      - 'environments/**'
+  
 
 permissions:
   contents: read
