@@ -76,15 +76,20 @@ jobs:
           name: plan-${{ matrix.environment }}
           path: ./environments/${{ matrix.environment }}/plan.tfplan
 
-  terraform-apply:
+   terraform-apply:
     name: 'Terraform Apply (${{ matrix.environment }})'
     runs-on: ubuntu-latest
-    needs: terraform-plan
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs:
+      - detect-environments
+      - terraform-plan
+    if: >
+      needs.detect-environments.outputs.environments != '["none"]' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push'
     strategy:
       matrix:
-        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}
-    environment: TOKEN_PRUEBA  # Esto activa la aprobación manual en GitHub UI
+        environment: ${{ fromJson(needs.detect-environments.outputs.environments || '["none"]') }}
+    environment: TOKEN_PRUEBA
 
     steps:
       - name: Checkout
