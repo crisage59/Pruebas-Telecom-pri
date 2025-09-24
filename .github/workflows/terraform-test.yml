@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload Terraform Plan artifact
         if: matrix.environment != 'none'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: plan-${{ matrix.environment }}
           path: ./environments/${{ matrix.environment }}/plan.tfplan
@@ -131,7 +131,7 @@ jobs:
 
       - name: Download Terraform Plan artifact
         if: matrix.environment != 'none'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: plan-${{ matrix.environment }}
           path: ./environments/${{ matrix.environment }}
