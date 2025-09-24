@@ -79,7 +79,8 @@ jobs:
     needs: terraform
     strategy:
       matrix:
-        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}
+       environment: ${{ fromJson(needs.detect-environments.outputs.environments || '[]') }}
+
 
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
