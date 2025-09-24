@@ -41,8 +41,6 @@ jobs:
       matrix:
         environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Ejecuta en paralelo para cada entorno detectado
 
-    # NO se usa 'environment' acá para evitar aprobación antes del plan
-
     defaults:
       run:
         shell: bash
@@ -55,10 +53,10 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4  # Configura credenciales AWS desde secretos
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          # Access Key guardado en secrets
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  # Secret Key guardado en secrets
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}          # Token de sesión (si aplica)
-          aws-region: ${{ vars.AWS_REGION }}                           # Región AWS desde variables de repo
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}          
+          aws-region: ${{ vars.AWS_REGION }}                           
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3  # Instala la versión 1.5.0 de Terraform CLI
@@ -88,18 +86,17 @@ jobs:
 
   terraform-apply:
     name: 'Terraform Apply (${{ matrix.environment }})'
-    runs-on: ubuntu-latest              # Runner Ubuntu para aplicar cambios
-    needs: terraform                   # Depende de que termine correctamente el job de plan
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'  # Solo corre en push a main
+    runs-on: ubuntu-latest              
+    needs: terraform                   
+    if: needs.detect-environments.outputs.environments != '[]' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     strategy:
       matrix:
-        # ✅ FIX: Si no hay entornos modificados, devuelve [] en lugar de romper el fromJson
-        environment: ${{ fromJson(needs.detect-environments.outputs.environments != '' && needs.detect-environments.outputs.environments != '[]' && needs.detect-environments.outputs.environments || '[]') }}
+        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Solo crea la matriz si hay entornos
 
     defaults:
       run:
         shell: bash
-        working-directory: ./environments/${{ matrix.environment }}  # Directorio del entorno
+        working-directory: ./environments/${{ matrix.environment }}  
 
     steps:
       - name: Wait for manual approval
@@ -110,10 +107,10 @@ jobs:
           instructions: "Revisá el Terraform Plan generado en el job anterior y aprobá para continuar con el Apply."
 
       - name: Checkout
-        uses: actions/checkout@v4             # Clona el repo para este job
+        uses: actions/checkout@v4             
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4  # Configura credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4  
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -121,14 +118,14 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3    # Instala Terraform CLI
+        uses: hashicorp/setup-terraform@v3    
         with:
           terraform_version: "1.5.0"
 
       - name: Terraform Init
-        run: terraform init                   # Inicializa Terraform para aplicar (por si hay cambios en módulos o backend)
+        run: terraform init                   
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false \
              -var="bucket_name=${{ vars.BUCKET_NAME }}" \
-             -var="environment=${{ matrix.environment }}"  # Aplica los cambios de Terraform automáticamente luego de la aprobación
+             -var="environment=${{ matrix.environment }}"
