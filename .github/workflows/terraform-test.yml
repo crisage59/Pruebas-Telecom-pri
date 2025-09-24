@@ -90,7 +90,9 @@ jobs:
         with:
           approvers: cristopher
           minimum-approvals: 1
-          instructions: "Revisá el Terraform Plan generado antes de aplicar los cambios en AWS."
+          secret: 'mi-secreto'
+          issue-body: |
+            Por favor revisa el plan de Terraform antes de aprobar el despliegue.
 
       - name: Checkout
         uses: actions/checkout@v4
