@@ -1,90 +1,127 @@
-name: 'Terraform S3 Pipeline'  # Nombre visible del pipeline en GitHub Actions
+name: 'Terraform S3 Pipeline'
 
 on:
   push:
-    branches: [ "main" ]  # Solo se ejecuta cuando haces push a la rama "main"
+    branches: [ "main" ]                # Se ejecuta solo cuando haces push a la rama main
     paths:
-      - 'environments/**'  # Solo si se modifican archivos dentro de "environments/"
+      - 'environments/**'               # Solo si se modifican archivos dentro de la carpeta environments/
 
 permissions:
-  contents: read  # Permiso mínimo necesario para clonar el repo
+  contents: read                       # Permisos mínimos para clonar el repositorio
 
 jobs:
-  detect-environments:  # Primer job: detectar qué entornos fueron modificados
+  detect-environments:
     name: 'Detect Changed Environments'
-    runs-on: ubuntu-latest  # Usa runner Linux más reciente
+    runs-on: ubuntu-latest             # Usa un runner Ubuntu actualizado
     outputs:
-      environments: ${{ steps.detect.outputs.environments }}  # Exporta los entornos detectados al siguiente job
+      environments: ${{ steps.detect.outputs.environments }}  # Exporta los entornos detectados para otros jobs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # Clona el repositorio
+        uses: actions/checkout@v4     # Clona el repositorio con profundidad 2 para detectar cambios recientes
         with:
-          fetch-depth: 2  # Clona los últimos 2 commits para detectar diferencias
+          fetch-depth: 2
 
       - name: Detect changed environments
         id: detect
         run: |
-          changed_files=$(git diff --name-only HEAD~1 HEAD)  # Archivos modificados en el último commit
+          # Obtiene archivos cambiados entre el último commit y el anterior
+          changed_files=$(git diff --name-only HEAD~1 HEAD)
+          # Filtra solo los que están dentro de 'environments/', extrae el nombre del entorno y crea una lista JSON
           changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
-          echo "environments=$changed_envs" >> $GITHUB_OUTPUT  # Devuelve los entornos modificados como output
-          echo "Changed environments: $changed_envs"  # Muestra por consola los entornos detectados
+          # Pone la lista de entornos modificados en la salida del step
+          echo "environments=$changed_envs" >> $GITHUB_OUTPUT
+          echo "Changed environments: $changed_envs"  # Muestra en consola para debugging
 
   terraform:
-    name: 'Terraform (${{ matrix.environment }})'  # Segundo job: ejecuta Terraform por cada entorno detectado
-    runs-on: ubuntu-latest
-    needs: detect-environments  # Espera que termine el job anterior
-    if: needs.detect-environments.outputs.environments != '[]'  # Solo corre si hay entornos detectados
+    name: 'Terraform (${{ matrix.environment }})'
+    runs-on: ubuntu-latest            # Runner Ubuntu para ejecutar Terraform
+    needs: detect-environments        # Espera a que termine el job de detección
+    if: needs.detect-environments.outputs.environments != '[]'  # Solo se ejecuta si detectó entornos modificados
     strategy:
       matrix:
-        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Crea un job por entorno detectado
+        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Ejecuta paralelo para cada entorno detectado
 
-    environment:
-      name: ${{ matrix.environment }}  # Define el "environment" para GitHub (permite protecciones y aprobaciones)
+    # NO se usa 'environment' acá para evitar aprobación antes del plan
 
     defaults:
       run:
         shell: bash
-        working-directory: ./environments/${{ matrix.environment }}  # Define el path base para cada paso
+        working-directory: ./environments/${{ matrix.environment }}  # Cambia el directorio a la carpeta del entorno
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # Clona nuevamente el repositorio
+        uses: actions/checkout@v4     # Clona el repositorio para este job
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4  # Configura las credenciales de AWS
+        uses: aws-actions/configure-aws-credentials@v4  # Configura credenciales AWS desde secretos
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}  # Accede a las credenciales guardadas en GitHub Secrets
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          # Access Key guardado en secrets
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  # Secret Key guardado en secrets
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}          # Token de sesión (si aplica)
+          aws-region: ${{ vars.AWS_REGION }}                           # Región AWS desde variables de repo
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3  # Instala la versión 1.5.0 de Terraform CLI
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check -recursive  # Verifica que el código Terraform esté correctamente formateado
+
+      - name: Terraform Init
+        id: init
+        run: terraform init  # Inicializa Terraform (descarga proveedores y módulos)
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color  # Valida la sintaxis y configuración del código Terraform
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"  
+        continue-on-error: true  # No falla el job aunque haya errores para poder revisar el plan
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'  # Si el plan falló, marca el job como fallido
+        run: exit 1
+
+  terraform-apply:
+    name: 'Terraform Apply (${{ matrix.environment }})'
+    runs-on: ubuntu-latest            # Runner Ubuntu para aplicar cambios
+    needs: terraform                 # Depende que termine correctamente el job de plan
+    if: needs.detect-environments.outputs.environments != '[]' && github.ref == 'refs/heads/main' && github.event_name == 'push'  # Solo corre en push a main si hay cambios
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Ejecuta por entorno
+
+    environment:
+      name: ${{ matrix.environment }}   # Aquí GitHub requiere aprobación manual antes de correr este job
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./environments/${{ matrix.environment }}  # Directorio del entorno
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4     # Clona el repo para este job
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4  # Configura credenciales AWS
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ vars.AWS_REGION }}  # Región de AWS definida en GitHub Variables
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3  # Instala Terraform CLI
         with:
-          terraform_version: "1.5.0"  # Usa versión específica de Terraform
-
-      - name: Terraform Format
-        id: fmt
-        run: terraform fmt -check -recursive  # Verifica formato del código (no lo corrige, solo reporta)
+          terraform_version: "1.5.0"
 
       - name: Terraform Init
-        id: init
-        run: terraform init  # Inicializa el backend y descarga módulos
+        run: terraform init  # Inicializa Terraform para aplicar (por si hay cambios en módulos o backend)
 
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color  # Valida sintaxis y configuración
-
-      - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"
-        continue-on-error: true  # Continúa incluso si hay errores (para que podamos comentar el plan en PR si fuera necesario)
-
-      - name: Terraform Plan Status
-        if: steps.plan.outcome == 'failure'  # Si falló el plan, el job también falla
-        run: exit 1
-
-      # ✅ Este paso solo se ejecuta tras aprobación manual desde la UI de GitHub
-      - name: Terraform Apply (Post Approval)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'  # Solo corre en push a main (no en PR)
-        run: terraform apply -auto-approve -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"  # Aplica los cambios de Terraform automáticamente
