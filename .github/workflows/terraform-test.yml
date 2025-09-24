@@ -16,17 +16,17 @@ jobs:
     outputs:
       environments: ${{ steps.detect.outputs.environments }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 2
-    - name: Detect changed environments
-      id: detect
-      run: |
-        changed_files=$(git diff --name-only HEAD~1 HEAD)
-        changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
-        echo "environments=$changed_envs" >> $GITHUB_OUTPUT
-        echo "Changed environments: $changed_envs"
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Detect changed environments
+        id: detect
+        run: |
+          changed_files=$(git diff --name-only HEAD~1 HEAD)
+          changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
+          echo "environments=$changed_envs" >> $GITHUB_OUTPUT
+          echo "Changed environments: $changed_envs"
 
   terraform:
     name: 'Terraform Plan (${{ matrix.environment }})'
@@ -83,11 +83,18 @@ jobs:
         if: matrix.environment != 'none'
         id: plan
         run: |
-          terraform plan -no-color -input=false \
+          terraform plan -no-color -input=false -out=plan.tfplan \
             -var="bucket_name=${{ vars.BUCKET_NAME }}" \
             -var="environment=${{ matrix.environment }}"
         working-directory: ./environments/${{ matrix.environment }}
         continue-on-error: true
+
+      - name: Upload Terraform Plan artifact
+        if: matrix.environment != 'none'
+        uses: actions/upload-artifact@v3
+        with:
+          name: plan-${{ matrix.environment }}
+          path: ./environments/${{ matrix.environment }}/plan.tfplan
 
       - name: Terraform Plan Status
         if: matrix.environment != 'none' && steps.plan.outcome == 'failure'
@@ -122,6 +129,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Download Terraform Plan artifact
+        if: matrix.environment != 'none'
+        uses: actions/download-artifact@v3
+        with:
+          name: plan-${{ matrix.environment }}
+          path: ./environments/${{ matrix.environment }}
+
       - name: Configure AWS credentials
         if: matrix.environment != 'none'
         uses: aws-actions/configure-aws-credentials@v4
@@ -144,7 +158,5 @@ jobs:
 
       - name: Terraform Apply
         if: matrix.environment != 'none'
-        run: terraform apply -auto-approve -input=false \
-             -var="bucket_name=${{ vars.BUCKET_NAME }}" \
-             -var="environment=${{ matrix.environment }}"
+        run: terraform apply -auto-approve ./plan.tfplan
         working-directory: ./environments/${{ matrix.environment }}
