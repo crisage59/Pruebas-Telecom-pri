@@ -19,14 +19,21 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        fetch-depth: 2
+        fetch-depth: 0  # <- Importante para que git diff funcione bien
+
     - name: Detect changed environments
       id: detect
       run: |
-        changed_files=$(git diff --name-only HEAD~1 HEAD)
+        echo "Listado de archivos cambiados entre origin/main y HEAD:"
+        changed_files=$(git diff --name-only origin/main...HEAD)
+        echo "$changed_files"
+
         changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
+
+        echo "Entornos detectados:"
+        echo "$changed_envs"
+
         echo "environments=$changed_envs" >> $GITHUB_OUTPUT
-        echo "Changed environments: $changed_envs"
 
   terraform:
     name: 'Terraform Plan (${{ matrix.environment }})'
@@ -46,6 +53,8 @@ jobs:
       - name: Checkout
         if: matrix.environment != 'none'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure AWS credentials
         if: matrix.environment != 'none'
@@ -117,6 +126,8 @@ jobs:
       - name: Checkout
         if: matrix.environment != 'none'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure AWS credentials
         if: matrix.environment != 'none'
