@@ -26,9 +26,6 @@ jobs:
         run: |
           changed_files=$(git diff --name-only HEAD~1 HEAD)
           changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
-          if [ -z "$changed_envs" ]; then
-            changed_envs='["none"]'
-          fi
           echo "environments=$changed_envs" >> $GITHUB_OUTPUT
           echo "Changed environments: $changed_envs"
 
@@ -39,8 +36,6 @@ jobs:
     strategy:
       matrix:
         environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}
-
-    if: matrix.environment != 'none'
 
     steps:
       - name: Checkout
@@ -86,7 +81,7 @@ jobs:
       matrix:
         environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}
 
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && matrix.environment != 'none'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Wait for manual approval
@@ -94,12 +89,18 @@ jobs:
         with:
           approvers: cristopher
           minimum-approvals: 1
-          instructions: "Revisá el Terraform Plan y aprobá para continuar con el Apply."
+          instructions: "Revisá el Terraform Plan generado antes de aplicar los cambios en AWS."
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plan-${{ matrix.environment }}
+          path: ./environments/${{ matrix.environment }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -118,12 +119,6 @@ jobs:
         run: terraform init
         working-directory: ./environments/${{ matrix.environment }}
 
-      - name: Download Terraform plan
-        uses: actions/download-artifact@v4
-        with:
-          name: plan-${{ matrix.environment }}
-          path: ./environments/${{ matrix.environment }}
-
-      - name: Terraform Apply
-        run: terraform apply -input=false ./plan.tfplan
+      - name: Terraform Apply (using plan file)
+        run: terraform apply -auto-approve ./plan.tfplan
         working-directory: ./environments/${{ matrix.environment }}
