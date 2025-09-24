@@ -83,7 +83,8 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -input=false \
+        run: |
+          terraform plan -no-color -input=false \
              -var="bucket_name=${{ vars.BUCKET_NAME }}" \
              -var="environment=${{ matrix.environment }}"
         continue-on-error: true
