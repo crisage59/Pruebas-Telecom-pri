@@ -16,35 +16,17 @@ jobs:
     outputs:
       environments: ${{ steps.detect.outputs.environments }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # Traemos todo el historial para poder usar git diff con rangos
-
-      - name: Detect changed environments
-        id: detect
-        shell: bash
-        env:
-          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: |
-          echo "Comparing changes from $GITHUB_EVENT_BEFORE to $GITHUB_SHA"
-
-          changed_files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_SHA)
-
-          echo "Changed files:"
-          echo "$changed_files"
-
-          changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u)
-
-          if [ -z "$changed_envs" ]; then
-            echo "environments=[]" >> $GITHUB_OUTPUT
-            echo "No environments changed"
-          else
-            envs_json=$(echo "$changed_envs" | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
-            echo "environments=$envs_json" >> $GITHUB_OUTPUT
-            echo "Changed environments: $envs_json"
-          fi
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - name: Detect changed environments
+      id: detect
+      run: |
+        changed_files=$(git diff --name-only HEAD~1 HEAD)
+        changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
+        echo "environments=$changed_envs" >> $GITHUB_OUTPUT
+        echo "Changed environments: $changed_envs"
 
   terraform:
     name: 'Terraform Plan (${{ matrix.environment }})'
