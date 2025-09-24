@@ -17,7 +17,7 @@ jobs:
       environments: ${{ steps.detect.outputs.environments }}  # Exporta los entornos detectados para otros jobs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4     # Clona el repositorio con profundidad 2 para detectar cambios recientes
+        uses: actions/checkout@v4      # Clona el repositorio con profundidad 2 para detectar cambios recientes
         with:
           fetch-depth: 2
 
@@ -34,12 +34,12 @@ jobs:
 
   terraform:
     name: 'Terraform (${{ matrix.environment }})'
-    runs-on: ubuntu-latest            # Runner Ubuntu para ejecutar Terraform
-    needs: detect-environments        # Espera a que termine el job de detección
+    runs-on: ubuntu-latest             # Runner Ubuntu para ejecutar Terraform
+    needs: detect-environments         # Espera a que termine el job de detección
     if: needs.detect-environments.outputs.environments != '[]'  # Solo se ejecuta si detectó entornos modificados
     strategy:
       matrix:
-        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Ejecuta paralelo para cada entorno detectado
+        environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Ejecuta en paralelo para cada entorno detectado
 
     # NO se usa 'environment' acá para evitar aprobación antes del plan
 
@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4     # Clona el repositorio para este job
+        uses: actions/checkout@v4      # Clona el repositorio para este job
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4  # Configura credenciales AWS desde secretos
@@ -88,15 +88,12 @@ jobs:
 
   terraform-apply:
     name: 'Terraform Apply (${{ matrix.environment }})'
-    runs-on: ubuntu-latest            # Runner Ubuntu para aplicar cambios
-    needs: terraform                 # Depende que termine correctamente el job de plan
+    runs-on: ubuntu-latest             # Runner Ubuntu para aplicar cambios
+    needs: terraform                  # Depende de que termine correctamente el job de plan
     if: needs.detect-environments.outputs.environments != '[]' && github.ref == 'refs/heads/main' && github.event_name == 'push'  # Solo corre en push a main si hay cambios
     strategy:
       matrix:
         environment: ${{ fromJson(needs.detect-environments.outputs.environments) }}  # Ejecuta por entorno
-
-    environment:
-      name: ${{ matrix.environment }}   # Aquí GitHub requiere aprobación manual antes de correr este job
 
     defaults:
       run:
@@ -104,8 +101,15 @@ jobs:
         working-directory: ./environments/${{ matrix.environment }}  # Directorio del entorno
 
     steps:
+      - name: Wait for manual approval
+        uses: trstringer/manual-approval@v1   # Acción de aprobación manual
+        with:
+          approvers: cristopher               # Usuario(s) de GitHub que pueden aprobar
+          minimum-approvals: 1                # Cantidad mínima de aprobaciones
+          instructions: "Revisá el Terraform Plan generado en el job anterior y aprobá para continuar con el Apply."
+
       - name: Checkout
-        uses: actions/checkout@v4     # Clona el repo para este job
+        uses: actions/checkout@v4             # Clona el repo para este job
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4  # Configura credenciales AWS
@@ -116,12 +120,12 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3  # Instala Terraform CLI
+        uses: hashicorp/setup-terraform@v3    # Instala Terraform CLI
         with:
           terraform_version: "1.5.0"
 
       - name: Terraform Init
-        run: terraform init  # Inicializa Terraform para aplicar (por si hay cambios en módulos o backend)
+        run: terraform init                   # Inicializa Terraform para aplicar (por si hay cambios en módulos o backend)
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"  # Aplica los cambios de Terraform automáticamente
+        run: terraform apply -auto-approve -input=false -var="bucket_name=${{ vars.BUCKET_NAME }}" -var="environment=${{ matrix.environment }}"  # Aplica los cambios de Terraform automáticamente luego de la aprobación
