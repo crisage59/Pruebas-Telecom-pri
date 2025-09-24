@@ -76,15 +76,14 @@ jobs:
         run: terraform fmt -check -recursive ./environments/${{ matrix.environment }}
 
       - name: Terraform Init
-        run: terraform init -chdir=./environments/${{ matrix.environment }}
+        run: terraform init # Sin el flag -chdir
 
       - name: Terraform Validate
-        run: terraform validate -no-color -chdir=./environments/${{ matrix.environment }}
+        run: terraform validate -no-color
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false \
-             -chdir=./environments/${{ matrix.environment }} \
              -var="bucket_name=${{ vars.BUCKET_NAME }}" \
              -var="environment=${{ matrix.environment }}"
         continue-on-error: true
@@ -132,10 +131,9 @@ jobs:
           terraform_version: "1.5.0"
 
       - name: Terraform Init
-        run: terraform init -chdir=./environments/${{ matrix.environment }}
+        run: terraform init # Sin el flag -chdir
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false \
-             -chdir=./environments/${{ matrix.environment }} \
              -var="bucket_name=${{ vars.BUCKET_NAME }}" \
              -var="environment=${{ matrix.environment }}"
