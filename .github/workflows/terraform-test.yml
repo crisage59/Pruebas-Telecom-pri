@@ -19,12 +19,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0   # Traemos todo el historial para poder usar git diff con rangos
 
       - name: Detect changed environments
         id: detect
+        shell: bash
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
-          changed_files=$(git diff --name-only HEAD~1 HEAD)
+          echo "Comparing changes from $GITHUB_EVENT_BEFORE to $GITHUB_SHA"
+
+          changed_files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_SHA)
+
+          echo "Changed files:"
+          echo "$changed_files"
 
           changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u)
 
