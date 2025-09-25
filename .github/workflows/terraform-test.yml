@@ -1,4 +1,4 @@
-name: Terraform S3 Pipeline
+name: Terraform Plan
 
 on:
   push:
@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   detect-environments:
-    name: Detect Changed Environments
     runs-on: ubuntu-latest
     outputs:
       environments: ${{ steps.detect.outputs.environments }}
@@ -26,11 +25,7 @@ jobs:
         run: |
           changed_files=$(git diff --name-only HEAD~1 HEAD)
           changed_envs=$(echo "$changed_files" | grep '^environments/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
-          if [ -z "$changed_envs" ]; then
-            echo "environments=[]" >> $GITHUB_OUTPUT
-          else
-            echo "environments=$changed_envs" >> $GITHUB_OUTPUT
-          fi
+          echo "environments=$changed_envs" >> $GITHUB_OUTPUT
           echo "Changed environments: $changed_envs"
 
   terraform-plan:
@@ -75,9 +70,8 @@ jobs:
         with:
           name: plan-${{ matrix.environment }}
           path: ./environments/${{ matrix.environment }}/plan.tfplan
-      
-      environment: TOKEN_PRUEBA  # Usa el entorno con aprobación manual que creaste
 
+ 
   terraform-apply:
     name: Terraform Apply (${{ matrix.environment }})
     runs-on: ubuntu-latest
