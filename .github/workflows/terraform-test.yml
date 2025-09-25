@@ -75,6 +75,8 @@ jobs:
         with:
           name: plan-${{ matrix.environment }}
           path: ./environments/${{ matrix.environment }}/plan.tfplan
+      
+      environment: TOKEN_PRUEBA  # Usa el entorno con aprobación manual que creaste
 
   terraform-apply:
     name: Terraform Apply (${{ matrix.environment }})

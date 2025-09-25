@@ -8,5 +8,3 @@ resource "aws_s3_bucket" "example" {
     Name        = var.bucket_name
   }
 }
-
-
